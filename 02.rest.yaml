@@ -1,0 +1,720 @@
+openapi: 3.0.3
+info:
+  title: Travel Social API
+  description: API для социальной сети путешествий
+  version: 1.0.0
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: integer
+          description: HTTP status code
+        details:
+          type: object
+          description: Additional error details
+
+    Post:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - location
+        - authorId
+        - authorName
+        - createdAt
+        - photos
+        - likesCount
+      properties:
+        id:
+          type: integer
+          description: Unique post identifier
+        title:
+          type: string
+          maxLength: 2000
+          description: Post title
+        description:
+          type: string
+          maxLength: 2000
+          description: Post description
+        location:
+          $ref: '#/components/schemas/Location'
+        authorId:
+          type: integer
+          description: Author user ID
+        authorName:
+          type: string
+          maxLength: 80
+          description: Author display name
+        createdAt:
+          type: string
+          format: date-time
+          description: Post creation timestamp
+        photos:
+          type: array
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/Photo'
+        likesCount:
+          type: integer
+          minimum: 0
+          description: Number of likes on the post
+        isLiked:
+          type: boolean
+          description: Whether the current user liked this post
+
+    PostFeed:
+      type: object
+      required:
+        - id
+        - title
+        - location
+        - authorId
+        - authorName
+        - createdAt
+        - photo
+        - likesCount
+      properties:
+        id:
+          type: integer
+          description: Unique post identifier
+        title:
+          type: string
+          maxLength: 2000
+          description: Post title
+        location:
+          $ref: '#/components/schemas/Location'
+        authorId:
+          type: integer
+          description: Author user ID
+        authorName:
+          type: string
+          maxLength: 80
+          description: Author display name
+        createdAt:
+          type: string
+          format: date-time
+          description: Post creation timestamp
+        photo:
+          $ref: '#/components/schemas/Photo'
+        likesCount:
+          type: integer
+          minimum: 0
+          description: Number of likes on the post
+        isLiked:
+          type: boolean
+          description: Whether the current user liked this post
+
+    Location:
+      type: object
+      required:
+        - latitude
+        - longitude
+        - name
+      properties:
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+          description: Latitude coordinate
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+          description: Longitude coordinate
+        name:
+          type: string
+          maxLength: 60
+          description: Location name
+
+    Photo:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Photo URL
+
+    FileUpload:
+      type: object
+      required:
+        - id
+        - url
+      properties:
+        id:
+          type: integer
+          description: File identifier
+        url:
+          type: string
+          format: uri
+          description: S3 URL of uploaded file
+
+    Comment:
+      type: object
+      required:
+        - id
+        - postId
+        - authorId
+        - authorName
+        - text
+        - createdAt
+      properties:
+        id:
+          type: integer
+          description: Comment identifier
+        postId:
+          type: integer
+          description: Post ID this comment belongs to
+        authorId:
+          type: integer
+          description: Comment author user ID
+        authorName:
+          type: string
+          maxLength: 80
+          description: Comment author display name
+        text:
+          type: string
+          maxLength: 1000
+          description: Comment text
+        createdAt:
+          type: string
+          format: date-time
+          description: Comment creation timestamp
+
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - displayName
+        - isSubscribed
+      properties:
+        id:
+          type: integer
+          description: User identifier
+        username:
+          type: string
+          maxLength: 50
+          description: Unique username
+        displayName:
+          type: string
+          maxLength: 80
+          description: User display name
+        avatarUrl:
+          type: string
+          format: uri
+          description: User avatar URL
+        isSubscribed:
+          type: boolean
+          description: Whether current user is subscribed to this user
+        subscribersCount:
+          type: integer
+          minimum: 0
+          description: Number of subscribers
+        postsCount:
+          type: integer
+          minimum: 0
+          description: Number of posts by this user
+
+    PaginatedResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          description: Array of items
+        pagination:
+          type: object
+          properties:
+            nextCursor:
+              type: string
+              description: Cursor for next page
+            hasMore:
+              type: boolean
+              description: Whether there are more items to load
+
+paths:
+  # Posts
+  /posts:
+    post:
+      summary: Create a new post
+      description: Create a new travel post with photos and location
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - description
+                - latitude
+                - longitude
+                - photoIds
+              properties:
+                title:
+                  type: string
+                  maxLength: 200
+                  description: Post title
+                description:
+                  type: string
+                  maxLength: 2000
+                  description: Post description
+                latitude:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                  description: Location latitude
+                longitude:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+                  description: Location longitude
+                photoIds:
+                  type: array
+                  maxItems: 30
+                  minItems: 1
+                  items:
+                    type: integer
+                    description: Array of file IDs uploaded via /files endpoint
+      responses:
+        '201':
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                properties:
+                  id:
+                    type: integer
+                    description: Created post ID
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /posts/my-feed:
+    get:
+      summary: Get my feed
+      description: Get posts feed based on user subscriptions with infinite scroll pagination
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          description: Cursor for pagination
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Posts feed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PostFeed'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /posts/by-user/{userId}:
+    get:
+      summary: Get posts by user
+      description: Get posts by a specific user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          description: Cursor for pagination
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User posts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PostFeed'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /posts/by-location:
+    get:
+      summary: Get posts by location
+      description: Get posts by location coordinates
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          description: Location latitude
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: lon
+          in: query
+          required: true
+          description: Location longitude
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: radius
+          in: query
+          description: Search radius in kilometers
+          schema:
+            type: number
+            default: 10
+            minimum: 0.1
+            maximum: 500
+        - name: cursor
+          in: query
+          description: Cursor for pagination
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Posts in location
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PostFeed'
+        '400':
+          description: Bad request - invalid coordinates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # File upload
+  /files:
+    post:
+      summary: Upload file
+      description: Upload a file to S3 storage
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to upload (max 1MB)
+      responses:
+        '201':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUpload'
+        '400':
+          description: Bad request - invalid file type or size
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /posts/{postId}:
+    get:
+      summary: Get post details
+      description: Get detailed information about a specific post
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /posts/{postId}/like:
+    post:
+      summary: Like a post
+      description: Like or unlike a post (toggle)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Like status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isLiked:
+                    type: boolean
+                    description: Current like status
+                  likesCount:
+                    type: integer
+                    description: Updated likes count
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Comments
+  /posts/{postId}/comments:
+    get:
+      summary: Get post comments
+      description: Get comments for a specific post with infinite scroll
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          description: Cursor for pagination
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Post comments
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Comment'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Add comment to post
+      description: Add a new comment to a specific post
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  maxLength: 1000
+                  description: Comment text
+      responses:
+        '201':
+          description: Comment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Subscriptions
+  /users/{userId}/subscribe:
+    post:
+      summary: Subscribe to user
+      description: Subscribe or unsubscribe to a user (toggle)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID to subscribe to
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Subscription status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isSubscribed:
+                    type: boolean
+                    description: Current subscription status
+                  subscribersCount:
+                    type: integer
+                    description: Updated subscribers count
+        '400':
+          description: Cannot subscribe to yourself or already at limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/subscriptions:
+    get:
+      summary: Get my subscriptions
+      description: Get list of users that current user is subscribed to
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          description: Cursor for pagination
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subscriptions list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
